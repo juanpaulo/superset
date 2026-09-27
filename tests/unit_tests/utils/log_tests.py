@@ -25,10 +25,12 @@ from flask import current_app
 from pytest_mock import MockerFixture
 from sqlalchemy.orm.session import Session
 
+from superset.constants import PASSWORD_MASK
 from superset.utils.log import (
     DBEventLogger,
     get_logger_from_status,
     get_object_ids_from_view_args,
+    redact_payload,
 )
 
 
@@ -183,3 +185,66 @@ def test_log_this_with_context_derives_object_id_despite_outer_decorator(
 
     payload = mock_log.call_args[1]
     assert payload["dashboard_id"] == 42
+
+
+def test_redact_payload_masks_secrets_at_any_depth() -> None:
+    payload = {
+        "database_name": "db",
+        "sqlalchemy_uri": "postgresql://user:s3cr%40t@host:5432/db",
+        "password": "hunter2",
+        "encrypted_extra": '{"credentials_info": {"private_key": "k"}}',
+        "parameters": {"host": "host", "password": "hunter2"},
+        "ssh_tunnel": {"username": "u", "private_key": "k", "password": "p"},
+        "items": [{"access_token": "t"}, "mysql://u:p@h/db"],
+        "empty_password": "",
+    }
+    redacted = redact_payload(payload)
+    assert redacted == {
+        "database_name": "db",
+        "sqlalchemy_uri": f"postgresql://user:{PASSWORD_MASK}@host:5432/db",
+        "password": PASSWORD_MASK,
+        "encrypted_extra": PASSWORD_MASK,
+        "parameters": {"host": "host", "password": PASSWORD_MASK},
+        "ssh_tunnel": {
+            "username": "u",
+            "private_key": PASSWORD_MASK,
+            "password": PASSWORD_MASK,
+        },
+        "items": [{"access_token": PASSWORD_MASK}, f"mysql://u:{PASSWORD_MASK}@h/db"],
+        "empty_password": "",
+    }
+    # the original request payload is left untouched
+    assert payload["password"] == "hunter2"  # noqa: S105
+
+
+def test_log_this_with_context_redacts_request_secrets(
+    app_context: None, mocker: MockerFixture
+) -> None:
+    """Credentials in the request body never reach the event log sink."""
+    mock_log = mocker.patch.object(DBEventLogger, "log")
+    logger = DBEventLogger()
+
+    class FakeDatabaseRestApi:  # pylint: disable=too-few-public-methods
+        @logger.log_this_with_context(action="DatabaseRestApi.post")
+        def post(self) -> str:
+            return "created"
+
+    with current_app.test_request_context(
+        "/api/v1/database/",
+        method="POST",
+        json={
+            "database_name": "db",
+            "sqlalchemy_uri": "postgresql://user:hunter2@host/db",
+            "password": "hunter2",
+            "ssh_tunnel": {"password": "tunn3lpw"},
+        },
+    ):
+        assert FakeDatabaseRestApi().post() == "created"
+
+    record = mock_log.call_args[1]["records"][0]
+    assert "hunter2" not in str(record)
+    assert "tunn3lpw" not in str(record)
+    assert record["database_name"] == "db"
+    assert record["sqlalchemy_uri"] == f"postgresql://user:{PASSWORD_MASK}@host/db"
+    assert record["password"] == PASSWORD_MASK
+    assert record["ssh_tunnel"] == {"password": PASSWORD_MASK}

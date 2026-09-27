@@ -19,6 +19,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
+import re
 import textwrap
 import uuid
 from abc import ABC, abstractmethod
@@ -32,7 +33,7 @@ from flask_appbuilder.const import API_URI_RIS_KEY
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from superset.constants import SKIP_VISIBILITY_FILTER_CLASSES
+from superset.constants import PASSWORD_MASK, SKIP_VISIBILITY_FILTER_CLASSES
 from superset.extensions import stats_logger_manager
 from superset.utils import json
 from superset.utils.core import get_user_id, LoggerLevel, to_int
@@ -123,6 +124,60 @@ def get_object_ids_from_view_args(
     if isinstance(ids, list) and ids and all(isinstance(i, int) for i in ids):
         return {f"{column}s": ids}
     return {}
+
+
+# Payload keys whose values must never be persisted to the ``logs`` table.
+# Matching is case-insensitive and by substring, so ``password``,
+# ``sshTunnelPassword``, ``server_cert`` and ``private_key_password`` are all
+# covered by the tokens below.
+SENSITIVE_PAYLOAD_KEY_TOKENS: tuple[str, ...] = (
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "private_key",
+    "privatekey",
+    "credential",
+    "api_key",
+    "apikey",
+    "authorization",
+    "cookie",
+    "encrypted_extra",
+    "server_cert",
+)
+
+# ``scheme://user:password@host`` -> ``scheme://user:XXXXXXXXXX@host``
+_URI_CREDENTIALS_RE = re.compile(r"(?<=://)([^/@:\s]*):([^@/\s]*)@")
+
+
+def is_sensitive_payload_key(key: Any) -> bool:
+    """Whether a payload key is known to carry a secret."""
+    if not isinstance(key, str):
+        return False
+    lowered = key.lower()
+    return any(token in lowered for token in SENSITIVE_PAYLOAD_KEY_TOKENS)
+
+
+def redact_payload(value: Any) -> Any:
+    """
+    Return a copy of ``value`` safe to persist in the event log.
+
+    Values under sensitive keys (see ``SENSITIVE_PAYLOAD_KEY_TOKENS``) are
+    replaced with ``PASSWORD_MASK`` at any nesting depth, and the password
+    component of any URI-shaped string (e.g. ``sqlalchemy_uri``) is masked.
+    """
+    if isinstance(value, dict):
+        return {
+            key: PASSWORD_MASK
+            if is_sensitive_payload_key(key) and item not in (None, "")
+            else redact_payload(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [redact_payload(item) for item in value]
+    if isinstance(value, str):
+        return _URI_CREDENTIALS_RE.sub(rf"\1:{PASSWORD_MASK}@", value)
+    return value
 
 
 def collect_request_payload(include_request_data: bool = True) -> dict[str, Any]:
@@ -324,10 +379,13 @@ class AbstractEventLogger(ABC):
         if log_to_statsd:
             stats_logger_manager.instance.incr(action)
 
+        payload = redact_payload(payload)
+        form_data = redact_payload(form_data)
+
         try:
             # bulk insert
             explode_by = payload.get("explode")
-            records = json.loads(payload.get(explode_by))  # type: ignore
+            records = redact_payload(json.loads(payload[explode_by]))
         except Exception:  # pylint: disable=broad-except
             records = [payload]
 
