@@ -32,7 +32,10 @@ from flask_appbuilder.const import API_URI_RIS_KEY
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from superset.constants import PASSWORD_MASK, SKIP_VISIBILITY_FILTER_CLASSES
+from superset.constants import (
+    PASSWORD_MASK as REDACTED_VALUE,
+    SKIP_VISIBILITY_FILTER_CLASSES,
+)
 from superset.extensions import stats_logger_manager
 from superset.utils import json
 from superset.utils.core import get_user_id, LoggerLevel, to_int
@@ -159,7 +162,7 @@ def mask_uri_credentials(value: str) -> str:
     colon = userinfo.find(":")
     if colon == -1 or "/" in userinfo:
         return value
-    return value[:authority_start] + userinfo[: colon + 1] + PASSWORD_MASK + value[at:]
+    return value[:authority_start] + userinfo[: colon + 1] + REDACTED_VALUE + value[at:]
 
 
 def is_sensitive_payload_key(key: Any) -> bool:
@@ -175,12 +178,12 @@ def redact_payload(value: Any) -> Any:
     Return a copy of ``value`` safe to persist in the event log.
 
     Values under sensitive keys (see ``SENSITIVE_PAYLOAD_KEY_TOKENS``) are
-    replaced with ``PASSWORD_MASK`` at any nesting depth, and the password
+    replaced with ``REDACTED_VALUE`` at any nesting depth, and the password
     component of any URI-shaped string (e.g. ``sqlalchemy_uri``) is masked.
     """
     if isinstance(value, dict):
         return {
-            key: PASSWORD_MASK
+            key: REDACTED_VALUE
             if is_sensitive_payload_key(key) and item not in (None, "")
             else redact_payload(item)
             for key, item in value.items()
