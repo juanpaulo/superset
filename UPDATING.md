@@ -24,6 +24,10 @@ assists people when migrating to a new version.
 
 ## Next
 
+- `requests` has been upgraded to 2.33.0 (CVE-2024-47081, CVE-2026-25645). `requests` 2.33.0
+  no longer supports Python 3.9, so Superset now requires Python 3.10 or newer
+  (`requires-python = ">=3.10"`). Deployments on Python 3.9 must upgrade the interpreter before
+  installing this release; no Superset configuration changes are required.
 - `selenium` has been upgraded from 3.x to 4.14+ (CVE-2022-28108, CVE-2023-5590). The
   Selenium 3 style keys in `WEBDRIVER_CONFIGURATION` (`executable_path`, `port`,
   `service_args`, `service_log_path`, `desired_capabilities`, `firefox_profile`) keep
