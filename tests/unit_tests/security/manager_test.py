@@ -20,7 +20,10 @@
 import json
 
 import pytest
+from flask import current_app
 from flask_appbuilder.security.sqla.models import Role, User
+from flask_jwt_extended import create_access_token, decode_token
+from jwt.exceptions import InvalidSubjectError
 from pytest_mock import MockerFixture
 
 from superset.common.query_object import QueryObject
@@ -43,6 +46,18 @@ def test_security_manager(app_context: None) -> None:
     """
     sm = SupersetSecurityManager(appbuilder)
     assert sm
+
+
+def test_jwt_subject_validation_preserves_existing_identities(
+    app_context: None, mocker: MockerFixture
+) -> None:
+    assert current_app.config["JWT_VERIFY_SUB"] is False
+    token = create_access_token(identity=42)
+    assert decode_token(token)["sub"] == 42
+
+    mocker.patch.dict(current_app.config, {"JWT_VERIFY_SUB": True})
+    with pytest.raises(InvalidSubjectError, match="Subject must be a string"):
+        decode_token(token)
 
 
 @pytest.fixture
