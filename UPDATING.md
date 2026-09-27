@@ -22,6 +22,18 @@ under the License.
 This file documents any backwards-incompatible changes in Superset and
 assists people when migrating to a new version.
 
+## Next
+
+- `selenium` has been upgraded from 3.x to 4.14+ (CVE-2022-28108, CVE-2023-5590). The
+  Selenium 3 style keys in `WEBDRIVER_CONFIGURATION` (`executable_path`, `port`,
+  `service_args`, `service_log_path`, `desired_capabilities`, `firefox_profile`) keep
+  working and are translated to the Selenium 4 `Service`/`Options` API. The keys
+  `chrome_options`, `firefox_options`, `firefox_binary` and `proxy`, which Selenium 4 removed,
+  raise a `ValueError` describing the replacement (`WEBDRIVER_OPTION_ARGS`,
+  `binary_location`, `capabilities`). Deployments using Selenium screenshots also need a
+  `geckodriver`/`chromedriver` compatible with Selenium 4 (Selenium Manager downloads one
+  automatically when none is found on `PATH`).
+
 ## 4.1.2
 
 - [31198](https://github.com/apache/superset/pull/31198) Disallows by default the use of the following ClickHouse functions: "version", "currentDatabase", "hostName".

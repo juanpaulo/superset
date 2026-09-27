@@ -141,7 +141,10 @@ override the base URL for selenium using:
 WEBDRIVER_BASEURL = "https://superset.company.com"
 ```
 
-Additional selenium web drive configuration can be set using `WEBDRIVER_CONFIGURATION`. You can
+Additional selenium web drive configuration can be set using `WEBDRIVER_CONFIGURATION`. Keys are
+passed to the Selenium 4 `WebDriver` constructor; the Selenium 3 style keys `executable_path`,
+`port`, `service_args`, `service_log_path` (driver `Service` settings) and `desired_capabilities`
+(driver `Options` capabilities) are still accepted and translated automatically. You can
 implement a custom function to authenticate selenium. The default function uses the `flask-login`
 session cookie. Here's an example of a custom function signature:
 

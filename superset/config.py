@@ -1474,7 +1474,14 @@ WEBDRIVER_WINDOW = {
 # PLAYWRIGHT_REPORTS_AND_THUMBNAILS feature flag)
 WEBDRIVER_AUTH_FUNC = None
 
-# Any config options to be passed as-is to the webdriver
+# Any config options to be passed to the webdriver. Keys are passed as-is to the
+# Selenium WebDriver constructor, except for the legacy (Selenium 3) keyword
+# arguments which are translated for Selenium 4: ``executable_path``, ``port``,
+# ``service_args``, ``service_log_path``/``log_path``/``log_output`` and ``env``
+# are used to build the driver ``Service``; ``desired_capabilities``/
+# ``capabilities`` are applied to the driver ``Options``; ``firefox_profile``
+# and ``binary_location`` are set on the ``Options`` as well. A ready-made
+# ``service`` object may be passed instead of the Service-level keys.
 WEBDRIVER_CONFIGURATION: dict[Any, Any] = {"service_log_path": "/dev/null"}
 
 # Additional args to be passed as arguments to the config object
