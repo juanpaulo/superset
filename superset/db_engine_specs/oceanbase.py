@@ -82,7 +82,8 @@ class OceanBaseEngineSpec(MySQLEngineSpec):
     sqlalchemy_uri_placeholder = (
         "oceanbase://user:password@host:port/db[?key=value&key=value...]"
     )
-    encryption_parameters = {"ssl": "0"}
+    encryption_parameters = {"ssl": "1"}
+    encryption_disable_parameters = {"ssl": "0"}
     supports_dynamic_schema = True
 
     # `MySQLEngineSpec._extended_aggregations` (STDDEV_SAMP/VAR_SAMP) is verified

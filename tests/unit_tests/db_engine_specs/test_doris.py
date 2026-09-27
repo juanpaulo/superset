@@ -280,3 +280,25 @@ def test_get_catalog_names(
 
     # Verify the returned catalog names
     assert catalogs == expected_result
+
+
+@pytest.mark.parametrize(
+    "encryption,expected_ssl",
+    [(True, "1"), (False, "0")],
+)
+def test_build_sqlalchemy_uri_encryption(encryption: bool, expected_ssl: str) -> None:
+    from superset.db_engine_specs.doris import DorisEngineSpec
+
+    uri = DorisEngineSpec.build_sqlalchemy_uri(
+        {
+            "username": "user",
+            "password": "pwd",
+            "host": "localhost",
+            "port": 9030,
+            "database": "db",
+            "query": {},
+            "encryption": encryption,
+        }
+    )
+
+    assert dict(make_url(uri).query) == {"ssl": expected_ssl}
