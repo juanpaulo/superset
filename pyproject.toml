@@ -61,6 +61,10 @@ dependencies = [
     "humanize",
     "importlib_metadata",
     "isodate",
+    # jinja2 is imported directly (``superset.jinja_context`` renders user SQL
+    # templates in a SandboxedEnvironment). 3.1.6 fixes the sandbox escapes
+    # CVE-2024-56201, CVE-2024-56326 and CVE-2025-27516.
+    "jinja2>=3.1.6, <4.0",
     "jsonpath-ng>=1.6.1, <2",
     "Mako>=1.2.2",
     "markdown>=3.0",

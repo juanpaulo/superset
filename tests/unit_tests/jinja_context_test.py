@@ -18,7 +18,10 @@
 
 from typing import Any
 
+import jinja2
 import pytest
+from jinja2.exceptions import SecurityError
+from packaging.version import Version
 from pytest_mock import MockerFixture
 from sqlalchemy.dialects import mysql
 from sqlalchemy.dialects.postgresql import dialect
@@ -30,6 +33,7 @@ from superset.exceptions import SupersetTemplateException
 from superset.jinja_context import (
     dataset_macro,
     ExtraCache,
+    get_template_processor,
     metric_macro,
     safe_proxy,
     WhereInMacro,
@@ -817,3 +821,39 @@ def test_metric_macro_no_dataset_id_with_context_chart_no_datasource_id(
     )
     mock_get_form_data.assert_called_once()
     DatasetDAO.find_by_id.assert_not_called()
+
+
+def test_jinja2_version_includes_sandbox_fixes() -> None:
+    """
+    jinja2 < 3.1.6 is vulnerable to sandbox escapes (CVE-2024-56201,
+    CVE-2024-56326, CVE-2025-27516) that matter because user SQL templates are
+    rendered in a ``SandboxedEnvironment``.
+    """
+    assert Version(jinja2.__version__) >= Version("3.1.6")
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        # CVE-2025-27516: ``|attr`` must not bypass the unsafe attribute checks
+        "{{ ''|attr('__class__')|attr('__mro__') }}",
+        "{{ ('{0.__class__}'|attr('format'))(1) }}",
+        # CVE-2024-56326: indirect ``str.format`` calls must stay sandboxed
+        "{% set fmt = '{0.__class__}'.format %}{{ fmt(1) }}",
+        "{{ '{0.__class__.__mro__}'.format(1) }}",
+    ],
+)
+def test_sandbox_blocks_known_escape_vectors(template: str) -> None:
+    """
+    Templates exercising the jinja2 sandbox escapes fixed in 3.1.5/3.1.6 must not
+    reach Python internals: the sandbox either raises ``SecurityError`` or
+    resolves the unsafe attribute to an undefined value.
+    """
+    database = Database(id=1, database_name="my_database", sqlalchemy_uri="sqlite://")
+    processor = get_template_processor(database=database)
+    try:
+        rendered = processor.process_template(template)
+    except SecurityError:
+        return
+    assert "<class" not in rendered
+    assert "is unsafe" in rendered or "no such element" in rendered
