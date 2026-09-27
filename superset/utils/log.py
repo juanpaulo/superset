@@ -384,7 +384,7 @@ class AbstractEventLogger(ABC):
 
         try:
             # bulk insert
-            explode_by = payload.get("explode")
+            explode_by = str(payload.get("explode"))
             records = redact_payload(json.loads(payload[explode_by]))
         except Exception:  # pylint: disable=broad-except
             records = [payload]
