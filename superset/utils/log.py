@@ -19,7 +19,6 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-import re
 import textwrap
 import uuid
 from abc import ABC, abstractmethod
@@ -146,8 +145,21 @@ SENSITIVE_PAYLOAD_KEY_TOKENS: tuple[str, ...] = (
     "server_cert",
 )
 
-# ``scheme://user:password@host`` -> ``scheme://user:XXXXXXXXXX@host``
-_URI_CREDENTIALS_RE = re.compile(r"(?<=://)([^/@:\s]*):([^@/\s]*)@")
+
+def mask_uri_credentials(value: str) -> str:
+    """``scheme://user:password@host`` -> ``scheme://user:XXXXXXXXXX@host``"""
+    scheme_end = value.find("://")
+    if scheme_end == -1:
+        return value
+    authority_start = scheme_end + 3
+    at = value.find("@", authority_start)
+    if at == -1:
+        return value
+    userinfo = value[authority_start:at]
+    colon = userinfo.find(":")
+    if colon == -1 or "/" in userinfo:
+        return value
+    return value[:authority_start] + userinfo[: colon + 1] + PASSWORD_MASK + value[at:]
 
 
 def is_sensitive_payload_key(key: Any) -> bool:
@@ -176,7 +188,7 @@ def redact_payload(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [redact_payload(item) for item in value]
     if isinstance(value, str):
-        return _URI_CREDENTIALS_RE.sub(rf"\1:{PASSWORD_MASK}@", value)
+        return mask_uri_credentials(value)
     return value
 
 
