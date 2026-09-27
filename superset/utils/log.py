@@ -32,10 +32,7 @@ from flask_appbuilder.const import API_URI_RIS_KEY
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from superset.constants import (
-    PASSWORD_MASK as REDACTED_VALUE,
-    SKIP_VISIBILITY_FILTER_CLASSES,
-)
+from superset.constants import SKIP_VISIBILITY_FILTER_CLASSES
 from superset.extensions import stats_logger_manager
 from superset.utils import json
 from superset.utils.core import get_user_id, LoggerLevel, to_int
@@ -147,6 +144,9 @@ SENSITIVE_PAYLOAD_KEY_TOKENS: tuple[str, ...] = (
     "encrypted_extra",
     "server_cert",
 )
+
+# Replacement written in place of redacted values; equals ``PASSWORD_MASK``.
+REDACTED_VALUE = "X" * 10
 
 
 def mask_uri_credentials(value: str) -> str:

@@ -31,6 +31,7 @@ from superset.utils.log import (
     get_logger_from_status,
     get_object_ids_from_view_args,
     redact_payload,
+    REDACTED_VALUE,
 )
 
 
@@ -185,6 +186,10 @@ def test_log_this_with_context_derives_object_id_despite_outer_decorator(
 
     payload = mock_log.call_args[1]
     assert payload["dashboard_id"] == 42
+
+
+def test_redacted_value_matches_password_mask() -> None:
+    assert REDACTED_VALUE == PASSWORD_MASK
 
 
 def test_redact_payload_masks_secrets_at_any_depth() -> None:
