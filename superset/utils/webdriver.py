@@ -243,31 +243,111 @@ class WebDriverPlaywright(WebDriverProxy):
 
 
 class WebDriverSelenium(WebDriverProxy):
+    # ``WebDriver.__init__`` keyword arguments that Selenium 4 moved onto the
+    # ``Service`` object. Values are the corresponding ``Service`` parameter.
+    SERVICE_KWARGS: dict[str, str] = {
+        "executable_path": "executable_path",
+        "port": "port",
+        "service_args": "service_args",
+        "service_log_path": "log_output",
+        "log_path": "log_output",
+        "log_output": "log_output",
+        "env": "env",
+    }
+    # Keyword arguments that Selenium 4 folded into ``options``; the value is
+    # a hint for the error message.
+    UNSUPPORTED_KWARGS: dict[str, str] = {
+        "chrome_options": "pass extra arguments via WEBDRIVER_OPTION_ARGS",
+        "firefox_options": "pass extra arguments via WEBDRIVER_OPTION_ARGS",
+        "firefox_binary": "use WEBDRIVER_CONFIGURATION['binary_location']",
+        "proxy": "use WEBDRIVER_CONFIGURATION['capabilities']",
+    }
+
+    @staticmethod
+    def build_driver_kwargs(
+        driver_type: str,
+        options: chrome.options.Options | firefox.options.Options,
+        configuration: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Translate ``WEBDRIVER_CONFIGURATION`` into keyword arguments accepted by
+        Selenium 4's ``WebDriver`` constructors.
+
+        Selenium 4 removed ``executable_path``, ``service_log_path``,
+        ``desired_capabilities`` and friends from ``WebDriver.__init__``. To keep
+        existing configurations working, Service-level keys are mapped onto a
+        ``Service`` instance, capability-level keys onto ``options``, and anything
+        else (``service``, ``keep_alive``) is passed through unchanged.
+        """
+        service_class = (
+            firefox.service.Service
+            if driver_type == "firefox"
+            else chrome.service.Service
+        )
+        kwargs: dict[str, Any] = {"options": options}
+        service_kwargs: dict[str, Any] = {}
+
+        for key, value in configuration.items():
+            if key in WebDriverSelenium.UNSUPPORTED_KWARGS:
+                raise ValueError(
+                    f"WEBDRIVER_CONFIGURATION['{key}'] is not supported by "
+                    f"Selenium >= 4; {WebDriverSelenium.UNSUPPORTED_KWARGS[key]}"
+                )
+            if key in WebDriverSelenium.SERVICE_KWARGS:
+                service_kwargs[WebDriverSelenium.SERVICE_KWARGS[key]] = value
+            elif key in ("desired_capabilities", "capabilities"):
+                for name, capability in (value or {}).items():
+                    options.set_capability(name, capability)
+            elif key == "binary_location":
+                options.binary_location = value
+            elif key == "firefox_profile":
+                if not isinstance(options, firefox.options.Options):
+                    raise ValueError(
+                        "WEBDRIVER_CONFIGURATION['firefox_profile'] requires "
+                        "WEBDRIVER_TYPE = 'firefox'"
+                    )
+                options.profile = value
+            elif key == "options":
+                kwargs["options"] = value
+            else:
+                kwargs[key] = value
+
+        if service_kwargs:
+            if "service" in kwargs:
+                raise ValueError(
+                    "WEBDRIVER_CONFIGURATION cannot combine 'service' with "
+                    f"{sorted(service_kwargs)}; move them onto the Service object"
+                )
+            kwargs["service"] = service_class(**service_kwargs)
+
+        return kwargs
+
     def create(self) -> WebDriver:
         pixel_density = current_app.config["WEBDRIVER_WINDOW"].get("pixel_density", 1)
+        options: chrome.options.Options | firefox.options.Options
         if self._driver_type == "firefox":
             driver_class = firefox.webdriver.WebDriver
             options = firefox.options.Options()
             profile = FirefoxProfile()
             profile.set_preference("layout.css.devPixelsPerPx", str(pixel_density))
-            kwargs: dict[Any, Any] = {"options": options, "firefox_profile": profile}
+            options.profile = profile
         elif self._driver_type == "chrome":
             driver_class = chrome.webdriver.WebDriver
             options = chrome.options.Options()
             options.add_argument(f"--force-device-scale-factor={pixel_density}")
             options.add_argument(f"--window-size={self._window[0]},{self._window[1]}")
-            kwargs = {"options": options}
         else:
             raise Exception(  # pylint: disable=broad-exception-raised
                 f"Webdriver name ({self._driver_type}) not supported"
             )
-        # Prepare args for the webdriver init
 
         # Add additional configured options
         for arg in current_app.config["WEBDRIVER_OPTION_ARGS"]:
             options.add_argument(arg)
 
-        kwargs.update(current_app.config["WEBDRIVER_CONFIGURATION"])
+        kwargs = self.build_driver_kwargs(
+            self._driver_type, options, current_app.config["WEBDRIVER_CONFIGURATION"]
+        )
         logger.debug("Init selenium driver")
 
         return driver_class(**kwargs)
