@@ -19,6 +19,7 @@ from typing import Any, Optional
 
 import pytest
 from sqlalchemy import JSON, types
+from sqlalchemy.engine.url import make_url
 
 from superset.db_engine_specs.oceanbase import ARRAY, MAP, NUMBER, NUMERIC
 from superset.utils.core import GenericDataType
@@ -59,3 +60,25 @@ def test_get_column_spec(
     )
 
     assert_column_spec(spec, native_type, sqla_type, attrs, generic_type, is_dttm)
+
+
+@pytest.mark.parametrize(
+    "encryption,expected_ssl",
+    [(True, "1"), (False, "0")],
+)
+def test_build_sqlalchemy_uri_encryption(encryption: bool, expected_ssl: str) -> None:
+    from superset.db_engine_specs.oceanbase import OceanBaseEngineSpec
+
+    uri = OceanBaseEngineSpec.build_sqlalchemy_uri(
+        {
+            "username": "user",
+            "password": "pwd",
+            "host": "localhost",
+            "port": 2881,
+            "database": "db",
+            "query": {},
+            "encryption": encryption,
+        }
+    )
+
+    assert dict(make_url(uri).query) == {"ssl": expected_ssl}

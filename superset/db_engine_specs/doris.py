@@ -116,7 +116,8 @@ class DorisEngineSpec(MySQLEngineSpec):
     sqlalchemy_uri_placeholder = (
         "doris://user:password@host:port/catalog.db[?key=value&key=value...]"
     )
-    encryption_parameters = {"ssl": "0"}
+    encryption_parameters = {"ssl": "1"}
+    encryption_disable_parameters = {"ssl": "0"}
     supports_dynamic_schema = True
     supports_catalog = supports_dynamic_catalog = True
     # while technically supported by Doris, this generates invalid table identifiers
